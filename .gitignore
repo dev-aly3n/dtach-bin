@@ -6,6 +6,9 @@ __pycache__/
 *.pyo
 .pytest_cache/
 .ruff_cache/
+.claude/
+.venv/
+venv/
 
 # Built binary (populated by cibuildwheel during build; not committed)
 src/dtach_bin/_bin/dtach
