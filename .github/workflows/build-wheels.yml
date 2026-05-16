@@ -1,0 +1,77 @@
+name: build-wheels
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.os }} ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,    arch: x86_64 }
+          - { os: ubuntu-24.04-arm, arch: aarch64 }
+          - { os: macos-13,         arch: x86_64 }
+          - { os: macos-14,         arch: arm64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify upstream source checksum
+        shell: bash
+        working-directory: vendor
+        run: |
+          if command -v sha256sum >/dev/null; then
+            sha256sum -c dtach-0.9.tar.gz.sha256
+          else
+            shasum -a 256 -c dtach-0.9.tar.gz.sha256
+          fi
+
+      - uses: pypa/cibuildwheel@v2
+        env:
+          # Single Python tag — we'll retag to py3-none afterwards
+          CIBW_BUILD: "cp310-*"
+          CIBW_ARCHS: ${{ matrix.arch }}
+          CIBW_BEFORE_BUILD: |
+            tar -xzf vendor/dtach-0.9.tar.gz -C /tmp
+            cd /tmp/dtach-0.9
+            ./configure
+            make
+            strip dtach 2>/dev/null || true
+            cp dtach {project}/src/dtach_bin/_bin/dtach
+            chmod +x {project}/src/dtach_bin/_bin/dtach
+          # Skip auditwheel/delocate — we ship a static C binary, not a Python
+          # C extension. There are no Python dynamic libs to repair.
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: ""
+          CIBW_REPAIR_WHEEL_COMMAND_MACOS: ""
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
+
+      - name: Retag wheel to py3-none (Python-version-agnostic)
+        shell: bash
+        run: |
+          python3 -m pip install --quiet wheel
+          for w in wheelhouse/*.whl; do
+            python3 -m wheel tags --python-tag py3 --abi-tag none --remove "$w"
+          done
+          ls -la wheelhouse/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.os }}-${{ matrix.arch }}
+          path: wheelhouse/*.whl
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: ls -la dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
