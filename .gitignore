@@ -1,0 +1,15 @@
+dist/
+build/
+*.egg-info/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+
+# Built binary (populated by cibuildwheel during build; not committed)
+src/dtach_bin/_bin/dtach
+src/dtach_bin/_bin/dtach.exe
+
+# Untarred upstream source (cibuildwheel extracts to /tmp during build)
+/tmp/dtach-*/
