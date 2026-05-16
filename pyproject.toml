@@ -16,6 +16,11 @@ classifiers = [
     "Topic :: Terminals",
 ]
 
+[project.urls]
+Source    = "https://github.com/dev-aly3n/dtach-bin"
+Issues    = "https://github.com/dev-aly3n/dtach-bin/issues"
+Upstream  = "https://github.com/crigler/dtach"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
