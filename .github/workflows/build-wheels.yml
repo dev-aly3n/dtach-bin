@@ -35,16 +35,16 @@ jobs:
           # Single Python tag — we'll retag to py3-none afterwards
           CIBW_BUILD: "cp310-*"
           CIBW_ARCHS: ${{ matrix.arch }}
-          CIBW_BUILD_VERBOSITY: "1"
           CIBW_BEFORE_BUILD: |
             set -ex
+            PROJECT_DIR="$(pwd)"
             tar -xzf vendor/dtach-0.9.tar.gz -C /tmp
             cd /tmp/dtach-0.9
             ./configure
             make
             strip dtach 2>/dev/null || true
-            cp dtach {project}/src/dtach_bin/_bin/dtach
-            chmod +x {project}/src/dtach_bin/_bin/dtach
+            cp dtach "$PROJECT_DIR/src/dtach_bin/_bin/dtach"
+            chmod +x "$PROJECT_DIR/src/dtach_bin/_bin/dtach"
           # Skip auditwheel/delocate — we ship a static C binary, not a Python
           # C extension. There are no Python dynamic libs to repair.
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: ""
