@@ -36,15 +36,30 @@ jobs:
           CIBW_BUILD: "cp310-*"
           CIBW_ARCHS: ${{ matrix.arch }}
           CIBW_BEFORE_BUILD: |
-            set -ex
+            exec 2>&1
+            set +e
             PROJECT_DIR="$(pwd)"
+            echo "===> START cwd=$PROJECT_DIR"
+            echo "===> ls root:" && ls -la
+            echo "===> ls src/dtach_bin/_bin:" && ls -la src/dtach_bin/_bin/ || true
+            echo "===> tar"
             tar -xzf vendor/dtach-0.9.tar.gz -C /tmp
+            RC=$?; echo "===> tar rc=$RC"; [ $RC -ne 0 ] && exit $RC
             cd /tmp/dtach-0.9
+            echo "===> cwd now $(pwd)"; ls
+            echo "===> configure"
             ./configure
+            RC=$?; echo "===> configure rc=$RC"; [ $RC -ne 0 ] && exit $RC
+            echo "===> make"
             make
+            RC=$?; echo "===> make rc=$RC"; [ $RC -ne 0 ] && exit $RC
+            ls -la dtach
             strip dtach 2>/dev/null || true
+            echo "===> cp to $PROJECT_DIR/src/dtach_bin/_bin/dtach"
             cp dtach "$PROJECT_DIR/src/dtach_bin/_bin/dtach"
+            RC=$?; echo "===> cp rc=$RC"; [ $RC -ne 0 ] && exit $RC
             chmod +x "$PROJECT_DIR/src/dtach_bin/_bin/dtach"
+            echo "===> DONE OK"
           # Skip auditwheel/delocate — we ship a static C binary, not a Python
           # C extension. There are no Python dynamic libs to repair.
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: ""
