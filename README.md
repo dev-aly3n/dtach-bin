@@ -38,8 +38,11 @@ import dtach_bin
 print(dtach_bin.path())  # → '/.../venv/bin/dtach'
 ```
 
-`dtach_bin.path()` is just `shutil.which("dtach")` with a clearer error
-message — useful when you want to log or display where the binary lives.
+`dtach_bin.path()` returns the binary in the active venv first (so it
+works even with `pipx` and `uv tool install` layouts where the venv's
+`bin/` isn't on the calling shell's PATH), falling back to a `PATH`
+lookup. Useful when a host process needs to invoke dtach via
+`subprocess` and can't rely on a particular shell PATH being set.
 
 ## Supported platforms
 
