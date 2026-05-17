@@ -30,7 +30,7 @@ jobs:
             shasum -a 256 -c dtach-0.9.tar.gz.sha256
           fi
 
-      - uses: pypa/cibuildwheel@v2
+      - uses: pypa/cibuildwheel@v2.23.4
         env:
           # Single Python tag — we'll retag to py3-none afterwards
           CIBW_BUILD: "cp310-*"
