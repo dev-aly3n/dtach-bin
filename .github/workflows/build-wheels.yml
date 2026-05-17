@@ -6,82 +6,104 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    name: ${{ matrix.os }} ${{ matrix.arch }}
+  build-linux:
+    name: linux ${{ matrix.arch }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest,    arch: x86_64 }
-          - { os: ubuntu-24.04-arm, arch: aarch64 }
-          - { os: macos-13,         arch: x86_64 }
-          - { os: macos-14,         arch: arm64 }
-    runs-on: ${{ matrix.os }}
+          - { arch: x86_64,  runs-on: ubuntu-latest }
+          - { arch: aarch64, runs-on: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Verify upstream source checksum
-        shell: bash
         working-directory: vendor
-        run: |
-          if command -v sha256sum >/dev/null; then
-            sha256sum -c dtach-0.9.tar.gz.sha256
-          else
-            shasum -a 256 -c dtach-0.9.tar.gz.sha256
-          fi
+        run: sha256sum -c dtach-0.9.tar.gz.sha256
 
-      - uses: pypa/cibuildwheel@v2.23.4
-        env:
-          # Single Python tag — we'll retag to py3-none afterwards
-          CIBW_BUILD: "cp310-*"
-          CIBW_ARCHS: ${{ matrix.arch }}
-          CIBW_BEFORE_BUILD: |
-            exec 2>&1
-            set +e
-            PROJECT_DIR="$(pwd)"
-            echo "===> START cwd=$PROJECT_DIR"
-            echo "===> ls root:" && ls -la
-            echo "===> ls src/dtach_bin/_bin:" && ls -la src/dtach_bin/_bin/ || true
-            echo "===> tar"
-            tar -xzf vendor/dtach-0.9.tar.gz -C /tmp
-            RC=$?; echo "===> tar rc=$RC"; [ $RC -ne 0 ] && exit $RC
-            cd /tmp/dtach-0.9
-            echo "===> cwd now $(pwd)"; ls
-            echo "===> configure"
-            ./configure
-            RC=$?; echo "===> configure rc=$RC"; [ $RC -ne 0 ] && exit $RC
-            echo "===> make"
-            make
-            RC=$?; echo "===> make rc=$RC"; [ $RC -ne 0 ] && exit $RC
-            ls -la dtach
-            strip dtach 2>/dev/null || true
-            echo "===> cp to $PROJECT_DIR/src/dtach_bin/_bin/dtach"
-            cp dtach "$PROJECT_DIR/src/dtach_bin/_bin/dtach"
-            RC=$?; echo "===> cp rc=$RC"; [ $RC -ne 0 ] && exit $RC
-            chmod +x "$PROJECT_DIR/src/dtach_bin/_bin/dtach"
-            echo "===> DONE OK"
-          # Skip auditwheel/delocate — we ship a static C binary, not a Python
-          # C extension. There are no Python dynamic libs to repair.
-          CIBW_REPAIR_WHEEL_COMMAND_LINUX: ""
-          CIBW_REPAIR_WHEEL_COMMAND_MACOS: ""
-          MACOSX_DEPLOYMENT_TARGET: "11.0"
-
-      - name: Retag wheel to py3-none (Python-version-agnostic)
-        shell: bash
+      - name: Build dtach + wheel inside manylinux2014
         run: |
-          python3 -m pip install --quiet wheel
-          for w in wheelhouse/*.whl; do
-            python3 -m wheel tags --python-tag py3 --abi-tag none --remove "$w"
-          done
-          ls -la wheelhouse/
+          docker run --rm -v "$(pwd):/work" -w /work \
+            quay.io/pypa/manylinux2014_${{ matrix.arch }} \
+            bash -exc '
+              tar -xzf vendor/dtach-0.9.tar.gz -C /tmp
+              cd /tmp/dtach-0.9
+              ./configure
+              make
+              strip dtach 2>/dev/null || true
+              cp dtach /work/src/dtach_bin/_bin/dtach
+              chmod +x /work/src/dtach_bin/_bin/dtach
+              PY=/opt/python/cp310-cp310/bin/python
+              "$PY" -m pip install --quiet build wheel
+              "$PY" -m build --wheel --outdir /work/wheelhouse /work
+              cd /work/wheelhouse
+              "$PY" -m wheel tags \
+                --python-tag py3 \
+                --abi-tag none \
+                --platform-tag manylinux2014_${{ matrix.arch }} \
+                --remove *.whl
+              ls -la
+            '
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wheel-${{ matrix.os }}-${{ matrix.arch }}
+          name: wheel-linux-${{ matrix.arch }}
           path: wheelhouse/*.whl
 
+  build-macos:
+    name: macos ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, runs-on: macos-13 }
+          - { arch: arm64,  runs-on: macos-14 }
+    runs-on: ${{ matrix.runs-on }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify upstream source checksum
+        working-directory: vendor
+        run: shasum -a 256 -c dtach-0.9.tar.gz.sha256
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Build dtach
+        run: |
+          set -ex
+          tar -xzf vendor/dtach-0.9.tar.gz -C /tmp
+          cd /tmp/dtach-0.9
+          ./configure
+          make
+          strip dtach 2>/dev/null || true
+          cp dtach "$GITHUB_WORKSPACE/src/dtach_bin/_bin/dtach"
+          chmod +x "$GITHUB_WORKSPACE/src/dtach_bin/_bin/dtach"
+
+      - name: Build wheel
+        run: |
+          set -ex
+          python -m pip install --quiet build wheel
+          python -m build --wheel
+          cd dist
+          python -m wheel tags \
+            --python-tag py3 \
+            --abi-tag none \
+            --platform-tag macosx_11_0_${{ matrix.arch }} \
+            --remove *.whl
+          ls -la
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-macos-${{ matrix.arch }}
+          path: dist/*.whl
+
   publish:
-    needs: build
+    needs: [build-linux, build-macos]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -90,5 +112,6 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - run: ls -la dist/
+      - name: List wheels
+        run: ls -la dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
