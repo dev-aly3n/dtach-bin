@@ -35,7 +35,9 @@ jobs:
           # Single Python tag — we'll retag to py3-none afterwards
           CIBW_BUILD: "cp310-*"
           CIBW_ARCHS: ${{ matrix.arch }}
+          CIBW_BUILD_VERBOSITY: "1"
           CIBW_BEFORE_BUILD: |
+            set -ex
             tar -xzf vendor/dtach-0.9.tar.gz -C /tmp
             cd /tmp/dtach-0.9
             ./configure
