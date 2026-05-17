@@ -57,7 +57,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { arch: x86_64, runs-on: macos-13 }
+          # macos-13 (Intel) dropped — runner pool is being phased out and
+          # blocks releases for hours. Intel Mac users fall back to sdist.
           - { arch: arm64,  runs-on: macos-14 }
     runs-on: ${{ matrix.runs-on }}
     env:
